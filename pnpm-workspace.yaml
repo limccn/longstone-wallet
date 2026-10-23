@@ -1,0 +1,14 @@
+# Standalone workspace manifest (the package itself is the only member).
+#
+# pnpm 12 refuses to run lifecycle scripts for dependencies unless they are
+# explicitly approved. `esbuild` (a vitest/tsc toolchain dependency) needs its
+# postinstall to select the platform binary; without this entry a clean
+# `pnpm install` fails with ERR_PNPM_IGNORED_BUILDS.
+#
+# This file is not published: package.json `files` lists only dist, README and
+# LICENSE.
+packages:
+  - "."
+
+allowBuilds:
+  esbuild: true
