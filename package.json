@@ -1,0 +1,60 @@
+{
+  "name": "@limccn/longstone-wallet",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Host-neutral wallet.v1 core for MemoryOverEth: Argon2id + AES-256-GCM vault, BIP-39/BIP-32 accounts and password policy. Key management and addresses only; no signing, no host storage, no network.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/limccn/longstone-wallet.git"
+  },
+  "homepage": "https://github.com/limccn/longstone-wallet",
+  "bugs": {
+    "url": "https://github.com/limccn/longstone-wallet/issues"
+  },
+  "keywords": [
+    "memory",
+    "wallet",
+    "vault",
+    "argon2id",
+    "aes-gcm",
+    "bip39",
+    "base-sepolia"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.1",
+    "@noble/hashes": "1.8.0",
+    "@scure/bip32": "1.7.0",
+    "@scure/bip39": "1.6.0",
+    "hash-wasm": "4.12.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

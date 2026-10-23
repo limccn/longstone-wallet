@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# This package has no sibling workspace dependencies: its five runtime
+# dependencies are pinned exact versions from npm, so CI checks out only this
+# repository. Please keep the imports in src/ to the pins asserted by
+# test/purity.test.ts.
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout longstone-wallet
+        uses: actions/checkout@v4
+
+      # `packageManager` in package.json is the source of truth (pnpm@12.11.2).
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No lockfile is committed in this repo; the supply-chain decision
+      # (SR-01) still allows --no-frozen-lockfile, matching the hosts.
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build (ESM + declarations)
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Assert the published file list
+        run: npm pack --dry-run
