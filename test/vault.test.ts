@@ -25,6 +25,7 @@ import {
   changePassword,
   createVault,
   deleteAccount,
+  hashRecord,
   loadVault,
   renameAccount,
   resetVault,
@@ -32,6 +33,8 @@ import {
   setActiveAccount,
   setIdleTimeout,
   unlockVault,
+  verifyRecordHash,
+  verifyWalletAbsent,
 } from '../src/index.js';
 import { FaultyStorage, MemoryStorage, TEST_KEYS, counterRng, fastArgon2 } from './helpers.js';
 
@@ -646,6 +649,110 @@ describe('change password atomicity', () => {
     if (!result.ok) throw result.error;
     expect(result.value.kdf).toEqual({ m: 65536, t: 3, p: 1 });
     expect(kdfOf(recordOf(harness))).toEqual({ m: 65536, t: 3, p: 1 });
+  });
+});
+
+describe('post-write verification primitives', () => {
+  /** Read failures before the next successful read; lets a test fail a prefix. */
+  class FlakyStorage extends MemoryStorage {
+    failGets = 0;
+
+    override async get(key: string): Promise<Record<string, unknown>> {
+      if (this.failGets > 0) {
+        this.failGets -= 1;
+        throw new Error('simulated read failure');
+      }
+      return super.get(key);
+    }
+  }
+
+  /** Runs a hook before each read; lets a test change the record between reads. */
+  class SteppedStorage extends MemoryStorage {
+    gets = 0;
+    onGet: ((count: number) => void) | null = null;
+
+    override async get(key: string): Promise<Record<string, unknown>> {
+      this.gets += 1;
+      this.onGet?.(this.gets);
+      return super.get(key);
+    }
+  }
+
+  const record = { format: 'longstone.wallet.v1', marker: 'record' };
+  const other = { format: 'longstone.wallet.v1', marker: 'other' };
+
+  it('confirms the expected record without writing or throwing', async () => {
+    const storage = new MemoryStorage();
+    storage.data.set(TEST_KEYS.record, record);
+    expect(await verifyRecordHash({ storage, keys: TEST_KEYS }, hashRecord(record))).toBe(true);
+    expect(storage.writes).toEqual([]);
+  });
+
+  it('retries once when the first read throws', async () => {
+    const storage = new FlakyStorage();
+    storage.data.set(TEST_KEYS.record, record);
+    storage.failGets = 1;
+    expect(await verifyRecordHash({ storage, keys: TEST_KEYS }, hashRecord(record))).toBe(true);
+  });
+
+  it('retries once when the first read returns a different record', async () => {
+    const storage = new SteppedStorage();
+    storage.data.set(TEST_KEYS.record, other);
+    storage.onGet = (count) => {
+      // The record settles on the second read, modelling a lagging adapter.
+      if (count === 2) storage.data.set(TEST_KEYS.record, record);
+    };
+    expect(await verifyRecordHash({ storage, keys: TEST_KEYS }, hashRecord(record))).toBe(true);
+  });
+
+  it('reports false when both reads disagree or throw', async () => {
+    const mismatched = new MemoryStorage();
+    mismatched.data.set(TEST_KEYS.record, other);
+    expect(
+      await verifyRecordHash({ storage: mismatched, keys: TEST_KEYS }, hashRecord(record)),
+    ).toBe(false);
+
+    const throwing = new FlakyStorage();
+    throwing.data.set(TEST_KEYS.record, record);
+    throwing.failGets = 2;
+    expect(
+      await verifyRecordHash({ storage: throwing, keys: TEST_KEYS }, hashRecord(record)),
+    ).toBe(false);
+  });
+
+  it('honours attempts = 1 and never lets a read failure escape', async () => {
+    const storage = new FlakyStorage();
+    storage.data.set(TEST_KEYS.record, record);
+    storage.failGets = 1;
+    await expect(
+      verifyRecordHash({ storage, keys: TEST_KEYS }, hashRecord(record), 1),
+    ).resolves.toBe(false);
+  });
+
+  it('confirms absence of both keys in one read without writing', async () => {
+    const storage = new MemoryStorage();
+    expect(await verifyWalletAbsent({ storage, keys: TEST_KEYS })).toBe(true);
+    expect(storage.writes).toEqual([]);
+  });
+
+  it('refuses absence while either key is still present', async () => {
+    const withRecord = new MemoryStorage();
+    withRecord.data.set(TEST_KEYS.record, record);
+    expect(await verifyWalletAbsent({ storage: withRecord, keys: TEST_KEYS })).toBe(false);
+
+    const withPending = new MemoryStorage();
+    withPending.data.set(TEST_KEYS.pending, record);
+    expect(await verifyWalletAbsent({ storage: withPending, keys: TEST_KEYS })).toBe(false);
+  });
+
+  it('retries absence after a read failure and reports false when it persists', async () => {
+    const recovered = new FlakyStorage();
+    recovered.failGets = 2; // both keys throw in attempt 1
+    expect(await verifyWalletAbsent({ storage: recovered, keys: TEST_KEYS })).toBe(true);
+
+    const broken = new FlakyStorage();
+    broken.failGets = 3;
+    expect(await verifyWalletAbsent({ storage: broken, keys: TEST_KEYS })).toBe(false);
   });
 });
 

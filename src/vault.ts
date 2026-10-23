@@ -158,6 +158,65 @@ export function hashRecord(value: unknown): string {
   return sha256Hex(utf8(stableStringify(value)));
 }
 
+/** Read count for the verification helpers; a bad argument degrades to one. */
+function readCount(attempts: number): number {
+  return Number.isFinite(attempts) && attempts >= 1 ? Math.trunc(attempts) : 1;
+}
+
+/**
+ * Design §4.2 step 7.c: a resolved `set` is not proof of persistence. Reads
+ * the primary record back and compares its hash with the one the successful
+ * operation reported. A missing value, a different record or a throw is
+ * retried once — the first read can fail transiently while the write settles —
+ * and only a persistent mismatch is reported as unverified.
+ *
+ * Total by contract: never writes, never logs, never throws, and never
+ * returns record contents. Callers get a boolean and keep ownership of what
+ * an unverified write means for their session.
+ */
+export async function verifyRecordHash(
+  deps: VaultDeps,
+  expectedHash: string,
+  attempts = 2,
+): Promise<boolean> {
+  const reads = readCount(attempts);
+  for (let attempt = 0; attempt < reads; attempt += 1) {
+    try {
+      const read = await deps.storage.get(deps.keys.record);
+      const value = read[deps.keys.record];
+      if (value !== undefined && hashRecord(value) === expectedHash) return true;
+    } catch {
+      // Retried below; a persistent read failure is `false`, not an exception.
+    }
+  }
+  return false;
+}
+
+/**
+ * Design §4.2 step 7: `remove` resolving is not proof either. Confirms both
+ * wallet keys are absent in the same read, so a caller may claim a deleted
+ * wallet or a completed reset. A key that is still present is a definitive
+ * "not removed" (no retry); a read failure is retried once, then reported as
+ * unverified.
+ *
+ * Never writes, never logs and never throws.
+ */
+export async function verifyWalletAbsent(deps: VaultDeps, attempts = 2): Promise<boolean> {
+  const reads = readCount(attempts);
+  for (let attempt = 0; attempt < reads; attempt += 1) {
+    try {
+      const [record, pending] = await Promise.all([
+        deps.storage.get(deps.keys.record),
+        deps.storage.get(deps.keys.pending),
+      ]);
+      return record[deps.keys.record] === undefined && pending[deps.keys.pending] === undefined;
+    } catch {
+      // Retried below; a persistent read failure is `false`, not an exception.
+    }
+  }
+  return false;
+}
+
 interface StoredReads {
   recordRaw: unknown;
   pendingRaw: unknown;

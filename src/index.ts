@@ -149,6 +149,8 @@ export type {
 export {
   DEFAULT_IDLE_TIMEOUT_MS,
   hashRecord,
+  verifyRecordHash,
+  verifyWalletAbsent,
   loadVault,
   createVault,
   unlockVault,
