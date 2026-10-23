@@ -3,3 +3,6 @@ dist
 *.tgz
 *.tsbuildinfo
 coverage
+
+# No lockfile is committed (CI installs with --no-frozen-lockfile).
+pnpm-lock.yaml
