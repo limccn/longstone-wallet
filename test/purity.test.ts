@@ -128,7 +128,7 @@ describe('wallet core stays pure', () => {
       expect(pkg['devDependencies']).not.toHaveProperty(forbidden);
     }
     expect(pkg['name']).toBe('@limccn/longstone-wallet');
-    expect(pkg['version']).toBe('0.1.0');
+    expect(pkg['version']).toBe('0.1.1');
     expect(pkg['type']).toBe('module');
     expect(pkg['sideEffects']).toBe(false);
     expect(pkg['exports']).toEqual({

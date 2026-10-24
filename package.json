@@ -1,6 +1,6 @@
 {
   "name": "@limccn/longstone-wallet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "description": "Host-neutral wallet.v1 core for MemoryOverEth: Argon2id + AES-256-GCM vault, BIP-39/BIP-32 accounts and password policy. Key management and addresses only; no signing, no host storage, no network.",
   "license": "Apache-2.0",
